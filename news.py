@@ -3,6 +3,7 @@ from datetime import datetime
 from vars import source_list, api_key, the_path, source_set
 from fpdf import FPDF
 import os
+from pymongo import MongoClient
 
 print()
 print("Welcome to my Kindle News Aggregator!")
@@ -187,7 +188,7 @@ class News:
 
             print("Please enter 'a' or 'b'.")
         
-        if b_or_a == 'b':
+        if b_or_a.lower() == 'b':
             self.breaking = True
         else:
             self.all = True
@@ -256,13 +257,6 @@ class News:
     def get_all_or_breaking(self):
         return self.breaking
 
-class NewsClass:
-
-    def __init__(self, title, url, outlet):
-        self.title = title
-        self.url = url
-        self.outlet = outlet
-
 class GetNewsInfo:
 
     def __init__(self, api_key, query_dict, breaking):
@@ -270,6 +264,7 @@ class GetNewsInfo:
         self.query_dict = query_dict
         self.breaking = breaking
         self.title_news_dict = {}
+        self.mongo_news = MongoNews()
 
     def get_news_articles_json(self):
 
@@ -291,7 +286,28 @@ class GetNewsInfo:
             url = article['url']
             title = article['title']
 
-            self.title_news_dict[title] = NewsClass(title, url, source)
+            if (not self.mongo_news.url_in_db(url)):
+                curr_news_dict = self.get_news_dict(title, url, source)
+                self.title_news_dict[title] = curr_news_dict
+                self.mongo_news.push_into_db(curr_news_dict)
+    
+    def get_news_dict(self, title, url, source):
+        return {"title":title, "url":url, "source":source}
+
+class MongoNews:
+
+    def __init__(self):
+        self.connection_string =  ""
+        self.client = MongoClient(self.connection_string)
+        self.db = self.client.test_database
+        self.collection = self.db.test_collection
+
+    def push_into_db(self, news_dict):
+        self.collection.insert_one(news_dict)
+    
+    def url_in_db(self, url):
+        query = {"url":url}
+        return self.collection.find_one(query)
 
 class PDFGenerator:
 
@@ -350,9 +366,10 @@ process_query = GetNewsInfo(api_key = the_api_key, query_dict=news_query_dict, b
 
 process_query.generate_title_news_dict()
 
+
 # Insert your path in the "vars" file
 
-my_path = the_path
+# my_path = the_path
 
-generate_pdf = PDFGenerator(process_query.title_news_dict)
-generate_pdf.generate_pdf(directory=my_path)
+#generate_pdf = PDFGenerator(process_query.title_news_dict)
+#generate_pdf.generate_pdf(directory=my_path)
